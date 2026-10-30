@@ -22,18 +22,23 @@ Usage:
 
 Requires template.html and theme.css next to this script. They are inlined into
 the generated HTML, so the output remains a single self-contained file.
-See schema.json for the deck format.
+See schema.json for the minimal deck format.
 
 Deck shape:
   {
     "title": "Deck title",
     "subtitle": "Optional deck subtitle",
-    "theme": { "accent": "#5eead4", "accent2": "#818cf8" },
-    "options": { "maxDiffLines": 28 },
     "slides": [
-      { "type": "title", "eyebrow": "...", "title": "...", "subtitle": "...", "meta": ["..."] },
-      { "type": "markdown", "eyebrow": "...", "title": "...", "content": "## Markdown\\n..." },
-      { "type": "split", "eyebrow": "...", "title": "...",
+      {
+        "layout": "title",
+        "eyebrow": "...",
+        "title": "...",
+        "subtitle": "...",
+        "meta": ["..."]
+      },
+      {
+        "eyebrow": "...",
+        "title": "...",
         "markdown": "Explanation on the left.",
         "diffs": [
           { "path": "src/file.ts", "diff": "diff --git ..." },
@@ -43,26 +48,11 @@ Deck shape:
     ]
   }
 
-A split slide puts markdown on the left and one or more diffs on the right.
+A slide with diffs renders markdown on the left and diff cards on the right.
 Long diffs paginate automatically; each page repeats the left-hand markdown.
 `;
 
-const DEFAULT_THEME = {
-  bg: "#070a12",
-  bg2: "#0b1220",
-  panel: "#0d1524",
-  panel2: "#09101c",
-  line: "#1d2a3f",
-  text: "#e8eef8",
-  muted: "#8fa0b8",
-  accent: "#5eead4",
-  accent2: "#818cf8",
-  add: "#34d399",
-  del: "#fb7185",
-  warn: "#fbbf24",
-};
-
-const cssColorKeys = new Set(Object.keys(DEFAULT_THEME));
+const DEFAULT_MAX_DIFF_LINES = 28;
 
 const escapeHtml = (value) =>
   String(value ?? "").replace(/[&<>"']/g, (char) => {
@@ -83,11 +73,6 @@ const escapeHtml = (value) =>
   });
 
 const escapeAttr = (value) => escapeHtml(value).replace(/`/g, "&#96;");
-
-const sanitizeColor = (value, fallback) => {
-  const raw = String(value ?? "").trim();
-  return /^[#a-zA-Z0-9(),.%\s-]+$/.test(raw) ? raw : fallback;
-};
 
 const sanitizeHref = (value) => {
   const href = String(value ?? "").trim();
@@ -482,36 +467,28 @@ function renderDiffCard(page) {
   </div>`;
 }
 
-function slideHeading(slide, fallback) {
-  const eyebrow = slide.eyebrow
-    ? `<div class="eyebrow">${inlineMarkdown(slide.eyebrow)}</div>`
-    : "";
-  const title = slide.title
-    ? `<h2>${inlineMarkdown(slide.title)}</h2>`
-    : `<h2>${escapeHtml(fallback)}</h2>`;
-  const description = slide.description
-    ? `<p class="lede">${inlineMarkdown(slide.description)}</p>`
-    : "";
-  return `${eyebrow}${title}${description}`;
+function effectiveSlideLayout(slide) {
+  if (slide?.layout === "title") return "title";
+  if (Array.isArray(slide?.diffs) && slide.diffs.length > 0) return "split";
+  return "note";
 }
 
-function renderSlide(slide, index, total, ctx, pager) {
+function renderSlide(slide, index, pager) {
+  const layout = effectiveSlideLayout(slide);
   const active = index === 0 ? " active" : "";
   const aria = index === 0 ? "false" : "true";
   const label = slide.title ? String(slide.title).replace(/\n/g, " ") : `Slide ${index + 1}`;
-  const common = `class="slide slide-${escapeAttr(slide.type ?? "markdown")}${active}" id="slide-${index}" data-index="${index}" data-title="${escapeAttr(label)}" aria-hidden="${aria}"`;
+  const common = `class="slide slide-${escapeAttr(layout)}${active}" id="slide-${index}" data-index="${index}" data-title="${escapeAttr(label)}" aria-hidden="${aria}"`;
 
-  if (slide.type === "title") {
+  if (layout === "title") {
     const meta = Array.isArray(slide.meta)
-      ? slide.meta
-          .map((item) => `<span class="chip">${inlineMarkdown(item)}</span>`)
-          .join("")
+      ? slide.meta.map((item) => `<span class="chip">${inlineMarkdown(item)}</span>`).join("")
       : "";
     return `<section ${common}>
       <div class="slide-inner title-inner">
         <div class="title-glow" aria-hidden="true"></div>
         ${slide.eyebrow ? `<div class="eyebrow title-eyebrow reveal">${inlineMarkdown(slide.eyebrow)}</div>` : ""}
-        <h1 class="reveal">${inlineMarkdown(slide.title ?? ctx.deck.title ?? "Untitled deck")}</h1>
+        <h1 class="reveal">${inlineMarkdown(slide.title ?? "Git Slides")}</h1>
         ${slide.subtitle ? `<p class="title-sub reveal">${inlineMarkdown(slide.subtitle)}</p>` : ""}
         ${meta ? `<div class="title-meta reveal">${meta}</div>` : ""}
         <div class="title-hint reveal">→ or space to begin</div>
@@ -519,14 +496,14 @@ function renderSlide(slide, index, total, ctx, pager) {
     </section>`;
   }
 
-  if (slide.type === "split") {
-    const diffs = (slide.__diffs ?? []).map((page) => renderDiffCard(page)).join("");
+  if (layout === "split") {
+    const diffs = slide.__diffs.map((page) => renderDiffCard(page)).join("");
     return `<section ${common}>
       <div class="slide-inner split-inner">
         <div class="split-left reveal">
           ${slide.eyebrow ? `<div class="eyebrow">${inlineMarkdown(slide.eyebrow)}</div>` : ""}
           ${slide.title ? `<h2>${inlineMarkdown(slide.title)}</h2>` : ""}
-          <div class="markdown split-markdown">${markdownToHtml(slide.markdown ?? slide.content ?? "")}</div>
+          <div class="markdown split-markdown">${markdownToHtml(slide.markdown ?? "")}</div>
           ${pager ? `<div class="pager split-pager">${pager}</div>` : ""}
         </div>
         <div class="split-right reveal">${diffs}</div>
@@ -534,24 +511,13 @@ function renderSlide(slide, index, total, ctx, pager) {
     </section>`;
   }
 
-  if (slide.type === "diff") {
-    return `<section ${common}>
-      <div class="slide-inner">
-        <header class="slide-head reveal">
-          ${slideHeading(slide, "Diff")}
-          ${pager ? `<div class="pager">${pager}</div>` : ""}
-        </header>
-        <div class="slide-body reveal">${renderDiffCard(slide.__page)}</div>
-      </div>
-    </section>`;
-  }
-
   return `<section ${common}>
-    <div class="slide-inner${slide.align === "center" ? " align-center" : ""}">
+    <div class="slide-inner">
       <header class="slide-head reveal">
-        ${slideHeading(slide, "Slide")}
+        ${slide.eyebrow ? `<div class="eyebrow">${inlineMarkdown(slide.eyebrow)}</div>` : ""}
+        ${slide.title ? `<h2>${inlineMarkdown(slide.title)}</h2>` : ""}
       </header>
-      <div class="slide-body markdown reveal">${markdownToHtml(slide.content ?? "")}</div>
+      <div class="slide-body markdown reveal">${markdownToHtml(slide.markdown ?? "")}</div>
     </div>
   </section>`;
 }
@@ -567,73 +533,36 @@ function normalizeDeck(input) {
 }
 
 function buildSlides(deck) {
-  const maxDiffLines = Math.max(
-    8,
-    Math.min(80, Number(deck.options?.maxDiffLines) || 28),
-  );
   const slides = [];
 
-  for (const slide of deck.slides) {
-    if (slide?.type === "split") {
-      const defs =
-        Array.isArray(slide.diffs) && slide.diffs.length
-          ? slide.diffs
-          : [{ diff: slide.diff ?? "", path: slide.path, maxLines: slide.maxLines }];
-      const builds = defs.map((entry) => {
-        const perDiffMax = Math.max(
-          8,
-          Math.min(
-            80,
-            Number(entry.maxLines) ||
-              Number(slide.maxLines) ||
-              maxDiffLines,
-          ),
-        );
-        return {
-          entry,
-          pages: buildDiffPages(entry.diff ?? "", {
-            maxLines: perDiffMax,
-            path: entry.path ?? slide.path,
-          }),
-        };
-      });
-      const pageCount = Math.max(1, ...builds.map((build) => build.pages.length));
+  for (const [index, slide] of deck.slides.entries()) {
+    if (!slide || typeof slide !== "object") {
+      throw new Error(`Slide ${index + 1} must be an object.`);
+    }
 
-      for (let pageIndex = 0; pageIndex < pageCount; pageIndex += 1) {
-        const visibleDiffs = builds
-          .filter((build) => build.pages[pageIndex])
-          .map((build) => build.pages[pageIndex]);
-        slides.push({
-          ...slide,
-          __diffs: visibleDiffs,
-          __pager:
-            pageCount > 1 ? `${pageIndex + 1} / ${pageCount}` : "",
-        });
+    if (effectiveSlideLayout(slide) !== "split") {
+      slides.push(slide);
+      continue;
+    }
+
+    const builds = slide.diffs.map((entry, diffIndex) => {
+      if (!entry || typeof entry !== "object") {
+        throw new Error(`Slide ${index + 1} diff ${diffIndex + 1} must be an object.`);
       }
-      continue;
-    }
-
-    if (slide?.type === "diff") {
-      const perSlideMax = Math.max(
-        8,
-        Math.min(80, Number(slide.maxLines) || maxDiffLines),
-      );
-      const pages = buildDiffPages(slide.diff ?? "", {
-        maxLines: perSlideMax,
-        path: slide.path,
+      return buildDiffPages(entry.diff ?? "", {
+        maxLines: DEFAULT_MAX_DIFF_LINES,
+        path: entry.path,
       });
-      pages.forEach((page, pageIndex) => {
-        slides.push({
-          ...slide,
-          __page: page,
-          __pager:
-            pages.length > 1 ? `${pageIndex + 1} / ${pages.length}` : "",
-        });
-      });
-      continue;
-    }
+    });
 
-    slides.push(slide);
+    const pageCount = Math.max(1, ...builds.map((pages) => pages.length));
+    for (let pageIndex = 0; pageIndex < pageCount; pageIndex += 1) {
+      slides.push({
+        ...slide,
+        __diffs: builds.map((pages) => pages[pageIndex]).filter(Boolean),
+        __pager: pageCount > 1 ? `${pageIndex + 1} / ${pageCount}` : "",
+      });
+    }
   }
 
   return slides;
@@ -657,61 +586,35 @@ function readAsset(name) {
 }
 
 function renderHtml(deck, slides) {
-  const theme = { ...DEFAULT_THEME };
-  for (const key of cssColorKeys) {
-    if (deck.theme?.[key] != null) {
-      theme[key] = sanitizeColor(deck.theme[key], DEFAULT_THEME[key]);
-    }
-  }
-
   const title = deck.title ?? "Git Slides";
   const subtitle = deck.subtitle ?? "";
   const total = slides.length;
-  const context = { deck };
   const slideHtml = slides
-    .map((slide, index) => renderSlide(slide, index, total, context, slide.__pager))
+    .map((slide, index) => renderSlide(slide, index, slide.__pager))
     .join("\n");
 
-  const overviewItems = slides
-    .map((slide, index) => {
-      const slideTitle = String(slide.title ?? `Slide ${index + 1}`)
-        .replace(/\n/g, " ")
-        .replace(/\s+/g, " ");
-      const kind = slide.type === "diff" ? "diff" : slide.type === "title" ? "title" : "note";
-      return `<li><button type="button" data-goto="${index}" class="overview-item">
+  const overviewItems = slides.map((slide, index) => {
+    const layout = effectiveSlideLayout(slide);
+    const kind = layout === "split" ? "diff" : layout;
+    const slideTitle = String(slide.title ?? `Slide ${index + 1}`)
+      .replace(/\n/g, " ")
+      .replace(/\s+/g, " ");
+    return `<li><button type="button" data-goto="${index}" class="overview-item">
         <span class="overview-num">${String(index + 1).padStart(2, "0")}</span>
         <span class="overview-title">${escapeHtml(slideTitle)}</span>
         <span class="overview-kind">${kind}</span>
       </button></li>`;
-    })
-    .join("\n");
+  }).join("\n");
 
-  const cssVars = [
-    `--bg:${theme.bg}`,
-    `--bg2:${theme.bg2}`,
-    `--panel:${theme.panel}`,
-    `--panel2:${theme.panel2}`,
-    `--line:${theme.line}`,
-    `--text:${theme.text}`,
-    `--muted:${theme.muted}`,
-    `--accent:${theme.accent}`,
-    `--accent2:${theme.accent2}`,
-    `--add:${theme.add}`,
-    `--del:${theme.del}`,
-    `--warn:${theme.warn}`,
-  ].join(";");
-
-  const css = fillTemplate(readAsset("theme.css"), { CSS_VARS: cssVars }).replace(/\n+$/, "");
   return fillTemplate(readAsset("template.html"), {
     TITLE: escapeHtml(title),
     DECK_LABEL: `${escapeHtml(title)}${subtitle ? ` &middot; ${escapeHtml(subtitle)}` : ""}`,
     TOTAL: String(total),
     SLIDES: slideHtml,
     OVERVIEW_ITEMS: overviewItems,
-    CSS: css,
+    CSS: readAsset("theme.css").replace(/\n+$/, ""),
   });
 }
-
 
 function main() {
   const args = process.argv.slice(2);
