@@ -1,0 +1,56 @@
+{
+  "$schema": "./schema.json",
+  "title": "Git Slides",
+  "subtitle": "Example code review: simplify the deck format",
+  "slides": [
+    {
+      "layout": "title",
+      "eyebrow": "EXAMPLE / SELF REVIEW",
+      "title": "Git Slides",
+      "subtitle": "From typed variants to one universal deck format.",
+      "meta": [
+        "tehZevo/git-slides",
+        "e5bc027",
+        "+84 / \u2212363"
+      ]
+    },
+    {
+      "eyebrow": "FORMAT",
+      "title": "One slide shape, inferred from intent",
+      "markdown": "- The deck no longer needs `type`, theme settings, or a full-width diff variant.\n- A slide with `diffs` renders as a split review; everything else becomes a note.\n- The title layout remains explicit because it has no diff and is only used to open the presentation.",
+      "diffs": [
+        {
+          "path": "git-slides.mjs",
+          "diff": "diff --git a/git-slides.mjs b/git-slides.mjs\nindex efca7f6..32b1a26 100644\n--- a/git-slides.mjs\n+++ b/git-slides.mjs\n@@ -30,8 +30,13 @@ Deck shape:\n     \"subtitle\": \"Optional deck subtitle\",\n-    \"theme\": { \"accent\": \"#5eead4\", \"accent2\": \"#818cf8\" },\n-    \"options\": { \"maxDiffLines\": 28 },\n     \"slides\": [\n-      { \"type\": \"title\", \"eyebrow\": \"...\", \"title\": \"...\", \"subtitle\": \"...\", \"meta\": [\"...\"] },\n-      { \"type\": \"markdown\", \"eyebrow\": \"...\", \"title\": \"...\", \"content\": \"## Markdown\\\\n...\" },\n-      { \"type\": \"split\", \"eyebrow\": \"...\", \"title\": \"...\",\n+      {\n+        \"layout\": \"title\",\n+        \"eyebrow\": \"...\",\n+        \"title\": \"...\",\n+        \"subtitle\": \"...\",\n+        \"meta\": [\"...\"]\n+      },\n+      {\n+        \"eyebrow\": \"...\",\n+        \"title\": \"...\",\n         \"markdown\": \"Explanation on the left.\",\n"
+        }
+      ]
+    },
+    {
+      "eyebrow": "SCHEMA",
+      "title": "Theme and option complexity disappears",
+      "markdown": "- Deck input is now just `title`, `subtitle`, and `slides`.\n- Theme colors, numeric pagination bounds, strict unknown-property rejection, and four rigid slide variants were removed.\n- The schema stays small enough to read without a reference guide.",
+      "diffs": [
+        {
+          "path": "schema.json",
+          "diff": "diff --git a/schema.json b/schema.json\nindex 77b75df..7ffa17f 100644\n--- a/schema.json\n+++ b/schema.json\n@@ -4,43 +4,13 @@\n   \"title\": \"Git Slides deck\",\n-  \"description\": \"Input format accepted by git-slides.mjs. The generator converts this JSON into one self-contained HTML slideshow.\",\n   \"type\": \"object\",\n   \"required\": [\"slides\"],\n-  \"additionalProperties\": false,\n+  \"additionalProperties\": true,\n   \"properties\": {\n-    \"$schema\": {\n-      \"description\": \"Optional reference to this schema for editor validation.\",\n-      \"type\": \"string\"\n-    },\n-    \"title\": {\n-      \"description\": \"Deck title used in the browser tab and top bar. Falls back to 'Git Slides'.\",\n-      \"type\": \"string\"\n-    },\n-    \"subtitle\": {\n-      \"description\": \"Optional deck subtitle shown next to the title in the top bar.\",\n-      \"type\": \"string\"\n-    },\n-    \"theme\": { \"$ref\": \"#/$defs/theme\" },\n-    \"options\": {\n-      \"description\": \"Generator options.\",\n-      \"type\": \"object\",\n-      \"additionalProperties\": false,\n-      \"properties\": {\n-        \"maxDiffLines\": {\n-          \"description\": \"Default maximum diff units per page before a diff is split. Values outside 8-80 are clamped by the generator.\",\n-          \"$ref\": \"#/$defs/maxLines\"\n-        }\n-      }\n-    },\n+    \"$schema\": { \"type\": \"string\" },\n+    \"title\": { \"type\": \"string\" },\n+    \"subtitle\": { \"type\": \"string\" },\n     \"slides\": {\n-      \"description\": \"Ordered slides rendered into the HTML deck.\",\n       \"type\": \"array\",\n       \"minItems\": 1,\n-      \"items\": {\n-                \"oneOf\": [\n-          { \"$ref\": \"#/$defs/titleSlide\" },\n-          { \"$ref\": \"#/$defs/markdownSlide\" },\n-          { \"$ref\": \"#/$defs/splitSlide\" },\n-          { \"$ref\": \"#/$defs/diffSlide\" }\n-        ]\n-      }\n+      \"items\": { \"$ref\": \"#/$defs/slide\" }\n     }\n"
+        }
+      ]
+    },
+    {
+      "eyebrow": "THEME",
+      "title": "Default colors become part of the theme",
+      "markdown": "- CSS variables are now static, so JSON no longer needs a `theme` object.\n- Dead styles for removed slide types and alignment options were deleted with them.\n- The default appearance remains unchanged.",
+      "diffs": [
+        {
+          "path": "theme.css",
+          "diff": "diff --git a/theme.css b/theme.css\nindex c8a10e7..8af03ae 100644\n--- a/theme.css\n+++ b/theme.css\n@@ -1,2 +1,2 @@\n-:root { {{CSS_VARS}}; --sans: \"Inter\", \"SF Pro Display\", ui-sans-serif, system-ui, -apple-system, \"Segoe UI\", sans-serif; --mono: \"JetBrains Mono\", \"SFMono-Regular\", \"Cascadia Code\", \"Roboto Mono\", Consolas, monospace; }\n+:root { --bg:#070a12;--bg2:#0b1220;--panel:#0d1524;--panel2:#09101c;--line:#1d2a3f;--text:#e8eef8;--muted:#8fa0b8;--accent:#5eead4;--accent2:#818cf8;--add:#34d399;--del:#fb7185;--warn:#fbbf24; --sans: \"Inter\", \"SF Pro Display\", ui-sans-serif, system-ui, -apple-system, \"Segoe UI\", sans-serif; --mono: \"JetBrains Mono\", \"SFMono-Regular\", \"Cascadia Code\", \"Roboto Mono\", Consolas, monospace; }\n * { box-sizing: border-box; }\n@@ -58,3 +58,2 @@ a { color: var(--accent); text-underline-offset: .18em; }\n .slide.prev { transform: translateY(-18px) scale(.995); }\n-.slide-diff { padding-top: clamp(58px, 7vh, 86px); padding-bottom: clamp(62px, 8.4vh, 94px); }\n .slide-inner { width: min(1240px, 100%); max-height: 100%; display: flex; flex-direction: column; min-height: 0; }\n@@ -99,3 +98,2 @@ a { color: var(--accent); text-underline-offset: .18em; }\n .split-right .diff-card { flex: 1 1 0; }\n-.align-center { text-align: center; align-items: center; }\n \n@@ -111,12 +109,4 @@ a { color: var(--accent); text-underline-offset: .18em; }\n }\n-.slide-head .lede {\n-  margin: 18px 0 0; color: var(--muted); font-size: clamp(15px, 1.45vw, 19px);\n-  line-height: 1.55; max-width: 880px;\n-}\n .slide-head { margin-bottom: clamp(18px, 2.6vh, 30px); flex: 0 0 auto; }\n-.slide-diff .slide-head { margin-bottom: clamp(12px, 1.8vh, 20px); }\n-.slide-diff .slide-head h2 { font-size: clamp(27px, 3.55vw, 44px); }\n-.slide-diff .slide-head .lede { font-size: clamp(13px, 1.12vw, 16px); line-height: 1.45; margin-top: 12px; max-width: 940px; }\n .pager { font-family: var(--mono); font-size: 11px; color: var(--muted); margin-top: 12px; letter-spacing: .08em; }\n-.slide-diff .pager { margin-top: 8px; }\n .slide-body { min-height: 0; flex: 1 1 auto; overflow: auto; display: flex; flex-direction: column; scrollbar-width: thin; scrollbar-color: var(--line) transparent; }\n"
+        }
+      ]
+    },
+    {
+      "eyebrow": "VALIDATION",
+      "title": "Checks that ran during the simplification",
+      "markdown": "| Check | Result |\n| --- | --- |\n| `node --check git-slides.mjs` | Pass |\n| JSON Schema validation | Pass |\n| Regenerate PR #495 walkthrough | 9 slides |\n| Visual review | Title, split diffs, pagination, overview |"
+    }
+  ]
+}
